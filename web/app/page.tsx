@@ -6,7 +6,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check, Users, UserPlus, Play, Trophy, X } from "lucide-react";
 
-const socket = io("http://localhost:3001");
+const socket = io("https://genlayer-whot-server.onrender.com");
 
 // UPDATED INTERFACES to include cardSum
 interface Player { id: string; username: string; cardCount?: number; cardSum?: number; }
