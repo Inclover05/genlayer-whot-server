@@ -35,11 +35,11 @@ export default function Home() {
   const [showTrailer, setShowTrailer] = useState(false);
 
   useEffect(() => {
-    // 🔥 GENERATE OR FETCH SESSION ID SO REFRESHES DON'T BREAK THE GAME
-    let storedSessionId = sessionStorage.getItem('whot_sessionId');
+    // 🔥 GENERATE OR FETCH SESSION ID USING LOCAL STORAGE (Survives hard refreshes and new tabs)
+    let storedSessionId = localStorage.getItem('whot_sessionId');
     if (!storedSessionId) {
         storedSessionId = Math.random().toString(36).substring(2, 15);
-        sessionStorage.setItem('whot_sessionId', storedSessionId);
+        localStorage.setItem('whot_sessionId', storedSessionId);
     }
     setSessionId(storedSessionId);
 
@@ -86,12 +86,12 @@ export default function Home() {
   const handleJoinLobby = (e: React.FormEvent) => {
     e.preventDefault();
     if (username && roomId) {
-      // 🔥 PASS SESSION ID TO SERVER
+      // 🔥 PASS LOCAL STORAGE SESSION ID TO SERVER
       socket.emit("join_room", { 
           roomId: roomId.toUpperCase(), 
           username, 
           maxPlayers,
-          sessionId: sessionStorage.getItem('whot_sessionId') || sessionId 
+          sessionId: localStorage.getItem('whot_sessionId') || sessionId 
       });
       setAppState(4);
     }

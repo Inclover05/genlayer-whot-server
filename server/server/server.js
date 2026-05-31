@@ -70,7 +70,6 @@ function safeDraw(room, player) {
 }
 
 io.on('connection', (socket) => {
-    // 🔥 SESSION PERSISTENCE ADDED HERE
     socket.on('join_room', ({ roomId, username, maxPlayers, sessionId }) => {
         if (rooms[roomId] && rooms[roomId].status === 'finished') {
             delete rooms[roomId];
@@ -84,7 +83,13 @@ io.on('connection', (socket) => {
 
         if (existingPlayer) {
             console.log(`♻️ Player ${username} reconnected! Swapping ID to ${socket.id}`);
-            existingPlayer.id = socket.id; // Update their connection ID to the new one
+            
+            // 🔥 If they were the host, transfer host powers to their new socket ID
+            if (room.host === existingPlayer.id) {
+                room.host = socket.id;
+            }
+
+            existingPlayer.id = socket.id; // Update their connection ID
             existingPlayer.username = username; // Update username just in case
             socket.join(roomId);
 
@@ -151,7 +156,7 @@ io.on('connection', (socket) => {
             console.log("\n=== 📡 CONTACTING GENLAYER BLOCKCHAIN ===");
             console.log(`Verifying Move: [${playedCard.shape} ${playedCard.number}] on top of [${room.activeCard.shape} ${room.activeCard.number}]`);
 
-            // 🔥 3. THE MAGIC: The SDK handles all the complicated binary encoding!
+            // THE MAGIC: The SDK handles all the complicated binary encoding!
             const result = await client.readContract({
                 address: contractAddress,
                 functionName: "validate_move",
@@ -252,7 +257,37 @@ io.on('connection', (socket) => {
         broadcastGameState(roomId);
     });
 
-    socket.on('disconnect', () => {});
+    // 🔥 THE GHOST BUSTER: Cleans up the lobby if someone leaves before the match starts
+    socket.on('disconnect', () => {
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            
+            // Only remove them if the game hasn't started yet
+            if (room.status === 'waiting') {
+                const playerIndex = room.players.findIndex(p => p.id === socket.id);
+                if (playerIndex !== -1) {
+                    room.players.splice(playerIndex, 1); // Remove the ghost
+                    
+                    if (room.players.length === 0) {
+                        // If room is empty, delete it
+                        delete rooms[roomId]; 
+                    } else if (room.host === socket.id) {
+                        // If the host left, make the next person in line the host
+                        room.host = room.players[0].id; 
+                    }
+                    
+                    // Tell the remaining players the lobby updated
+                    if (rooms[roomId]) {
+                        io.to(roomId).emit('room_updated', { 
+                            players: room.players.map(p => ({ id: p.id, username: p.username })), 
+                            host: room.host, 
+                            maxPlayers: room.maxPlayers 
+                        });
+                    }
+                }
+            }
+        }
+    });
 });
 
 const PORT = process.env.PORT || 3001;
