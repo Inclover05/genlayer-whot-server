@@ -8,7 +8,6 @@ import { Copy, Check, Users, UserPlus, Play, Trophy, X } from "lucide-react";
 
 const socket = io("https://genlayer-whot-server.onrender.com");
 
-// UPDATED INTERFACES to include cardSum
 interface Player { id: string; username: string; cardCount?: number; cardSum?: number; }
 interface Card { id: string; shape: string; number: number; isAction: boolean; }
 interface LeaderboardEntry { id: string; username: string; cardCount: number; cardSum: number; }
@@ -22,6 +21,9 @@ export default function Home() {
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // 🔥 SESSION PERSISTENCE STATE
+  const [sessionId, setSessionId] = useState("");
+
   const [myHand, setMyHand] = useState<Card[]>([]);
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const [currentTurnId, setCurrentTurnId] = useState("");
@@ -30,10 +32,17 @@ export default function Home() {
   const [winnerData, setWinnerData] = useState<{ id: string, name: string } | null>(null);
   
   const [finalLeaderboard, setFinalLeaderboard] = useState<LeaderboardEntry[] | null>(null);
-  
   const [showTrailer, setShowTrailer] = useState(false);
 
   useEffect(() => {
+    // 🔥 GENERATE OR FETCH SESSION ID SO REFRESHES DON'T BREAK THE GAME
+    let storedSessionId = sessionStorage.getItem('whot_sessionId');
+    if (!storedSessionId) {
+        storedSessionId = Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem('whot_sessionId', storedSessionId);
+    }
+    setSessionId(storedSessionId);
+
     const params = new URLSearchParams(window.location.search);
     if (params.get("room")) {
       setRoomId(params.get("room")!.toUpperCase());
@@ -77,7 +86,13 @@ export default function Home() {
   const handleJoinLobby = (e: React.FormEvent) => {
     e.preventDefault();
     if (username && roomId) {
-      socket.emit("join_room", { roomId: roomId.toUpperCase(), username, maxPlayers });
+      // 🔥 PASS SESSION ID TO SERVER
+      socket.emit("join_room", { 
+          roomId: roomId.toUpperCase(), 
+          username, 
+          maxPlayers,
+          sessionId: sessionStorage.getItem('whot_sessionId') || sessionId 
+      });
       setAppState(4);
     }
   };
@@ -281,7 +296,6 @@ export default function Home() {
               {players.filter(p => p.id !== socket.id).map(opponent => (
                 <div key={opponent.id} className={`backdrop-blur-xl px-6 py-3 rounded-full border shadow-lg flex items-center space-x-3 transition-colors ${opponent.cardCount === 1 ? 'bg-red-500/20 border-red-500 animate-pulse' : 'bg-[#111111]/80 border-white/10'}`}>
                    <div className={`w-3 h-3 rounded-full ${currentTurnId === opponent.id ? 'bg-amber-400 animate-pulse shadow-[0_0_15px_#fbbf24]' : opponent.cardCount === 1 ? 'bg-red-500' : 'bg-slate-600'}`}></div>
-                   {/* UPDATED: Displays both card count AND the total score (cardSum) for opponents */}
                    <span className={`${opponent.cardCount === 1 ? 'text-red-400 font-bold' : 'text-slate-200 font-medium'}`}>
                        {opponent.username} 
                        <span className={`text-sm ml-1 ${opponent.cardCount === 1 ? 'text-red-500' : 'text-slate-500'}`}>
@@ -343,7 +357,6 @@ export default function Home() {
              <h2 className="text-lg md:text-xl text-slate-400 font-medium mb-2 tracking-widest uppercase">Table Closed</h2>
              <h1 className="text-4xl md:text-6xl font-black text-white mb-8 tracking-tight">{winnerData.id === socket.id ? "YOU WON!" : `${winnerData.name.toUpperCase()} WINS`}</h1>
              
-             {/* UPDATED: DYNAMIC LEADERBOARD RENDERING SCORE (SUM) */}
              {finalLeaderboard && (
                <div className="w-full bg-[#080808]/50 rounded-2xl p-4 md:p-6 mb-8 text-left border border-white/5 shadow-inner">
                  <h3 className="text-xs text-slate-500 mb-4 uppercase tracking-widest font-bold">Final Standings (Lowest Score Wins)</h3>

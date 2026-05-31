@@ -40,6 +40,7 @@ function generateDeck() {
 
 function broadcastGameState(roomId) {
     const room = rooms[roomId];
+    if (!room) return;
     room.players.forEach(player => {
         io.to(player.id).emit('game_updated', {
             activeCard: room.activeCard,
@@ -69,7 +70,8 @@ function safeDraw(room, player) {
 }
 
 io.on('connection', (socket) => {
-    socket.on('join_room', ({ roomId, username, maxPlayers }) => {
+    // 🔥 SESSION PERSISTENCE ADDED HERE
+    socket.on('join_room', ({ roomId, username, maxPlayers, sessionId }) => {
         if (rooms[roomId] && rooms[roomId].status === 'finished') {
             delete rooms[roomId];
         }
@@ -77,16 +79,37 @@ io.on('connection', (socket) => {
         if (!rooms[roomId]) rooms[roomId] = { id: roomId, players: [], host: socket.id, status: 'waiting', maxPlayers: maxPlayers || 6, deck: [], discardPile: [], activeCard: null, currentTurnIndex: 0, isProcessingMove: false };
         const room = rooms[roomId];
         
-        if (room.status !== 'waiting' || room.players.length >= room.maxPlayers) return;
+        // Find existing player using their unique browser sessionId instead of socket.id
+        const existingPlayer = room.players.find(p => p.sessionId === sessionId);
 
-        const existingPlayer = room.players.find(p => p.id === socket.id);
-        if (!existingPlayer) {
-            room.players.push({ id: socket.id, username, hand: [] });
+        if (existingPlayer) {
+            console.log(`♻️ Player ${username} reconnected! Swapping ID to ${socket.id}`);
+            existingPlayer.id = socket.id; // Update their connection ID to the new one
+            existingPlayer.username = username; // Update username just in case
+            socket.join(roomId);
+
+            // If game is live, send them their exact cards back instantly
+            if (room.status === 'playing') {
+                io.to(socket.id).emit('game_updated', {
+                    activeCard: room.activeCard,
+                    myHand: existingPlayer.hand,
+                    marketCount: room.deck.length,
+                    currentTurnId: room.players[room.currentTurnIndex].id,
+                    players: room.players.map(p => ({ 
+                        id: p.id, 
+                        username: p.username, 
+                        cardCount: p.hand.length,
+                        cardSum: p.hand.reduce((sum, card) => sum + card.number, 0)
+                    }))
+                });
+            }
         } else {
-            existingPlayer.username = username; 
+            // It's a brand new player
+            if (room.status !== 'waiting' || room.players.length >= room.maxPlayers) return;
+            room.players.push({ id: socket.id, sessionId: sessionId, username, hand: [] });
+            socket.join(roomId);
         }
         
-        socket.join(roomId);
         io.to(roomId).emit('room_updated', { players: room.players.map(p => ({ id: p.id, username: p.username })), host: room.host, maxPlayers: room.maxPlayers });
     });
 
@@ -232,5 +255,5 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {});
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`🔥 GenLayer Whot Server is live on port ${PORT} (Bradbury Testnet)`));
