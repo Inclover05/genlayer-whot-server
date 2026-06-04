@@ -1,32 +1,35 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 from genlayer import *
+import json
 
-class WhotGame(gl.Contract):
-    # GenLayer strictly requires TreeMap for storage. Native dict is invalid.
-    rooms: TreeMap[str, str]
-
+class NaijaWhot(gl.Contract):
     def __init__(self):
-        self.rooms = TreeMap()
+        pass
 
     @gl.public.write
-    def create_room(self, room_id: str, max_players: u256, host_id: str) -> str:
-        if self.rooms.get(room_id):
-            return "Error: Room already exists"
+    def validate_move(self, played_shape: str, played_number: int, active_shape: str, active_number: int) -> str:
+        # 1. Standard Logic Validation
+        is_valid = (played_shape == active_shape) or (played_number == active_number)
+        
+        if not is_valid:
+            return '{"isValid": false, "commentary": ""}'
             
-        # Storing simple state as a formatted string to keep it GenVM compliant
-        self.rooms[room_id] = f"{max_players}|{host_id}|waiting"
-        return "Success: Room created"
-
-    @gl.public.write
-    def join_room(self, room_id: str, player_id: str) -> str:
-        if not self.rooms.get(room_id):
-            return "Error: Room not found"
+        commentary = ""
+        
+        # 2. THE GENLAYER AI FEATURE
+        if played_number in [1, 2, 14]:
+            task_prompt = f"A player just played action card {played_number} (1=Hold On, 2=Pick Two, 14=General Market) in a game of Naija Whot. Generate exactly one short, funny Nigerian street reaction or trash talk to hype up the move."
             
-        return "Success: Joined room"
-
-    @gl.public.view
-    def validate_move(self, played_shape: str, played_number: u256, active_shape: str, active_number: u256) -> bool:
-        """Decentralized verification of Whot rules."""
-        if played_shape == active_shape or played_number == active_number:
-            return True
-        return False
+            # This calls GenLayer's Intelligent LLM consensus layer
+            commentary = gl.eq_principle.prompt_non_comparative(
+                lambda: task_prompt,
+                task="Generate a short Nigerian street reaction",
+                criteria="The response must be a short text string using Nigerian pidgin or street slang."
+            )
+            
+        # Package everything nicely into a JSON string for Node.js
+        result = {
+            "isValid": True,
+            "commentary": commentary
+        }
+        return json.dumps(result)

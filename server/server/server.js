@@ -150,10 +150,13 @@ io.on('connection', (socket) => {
 
         // --- DECENTRALIZED LIVE GENLAYER SDK VALIDATION ---
         let isValid = false;
+        let aiCommentary = ""; 
+
         try {
-            const contractAddress = "0x552D701D85bAa62F3aa8d18229d7c00AB282e373";
+            // ⚠️ REPLACE THIS WITH YOUR BRAND NEW CONTRACT ADDRESS FROM GENLAYER STUDIO ⚠️
+            const contractAddress = "0xf01124a80C383dCF576892Db44F662437d0309B7";
             
-            console.log("\n=== 📡 CONTACTING GENLAYER BLOCKCHAIN ===");
+            console.log("\n=== 📡 CONTACTING GENLAYER INTELLIGENT CONTRACT ===");
             console.log(`Verifying Move: [${playedCard.shape} ${playedCard.number}] on top of [${room.activeCard.shape} ${room.activeCard.number}]`);
 
             // THE MAGIC: The SDK handles all the complicated binary encoding!
@@ -168,16 +171,19 @@ io.on('connection', (socket) => {
                 ]
             });
 
-            console.log(`✅ VERDICT FROM SMART CONTRACT: ${result}`);
-            console.log("=========================================\n");
-            
-            if (result === true || result === "true" || result === "True") {
+            // Parse the JSON string coming directly from the GenLayer Virtual Machine
+            const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+
+            if (parsedResult.isValid === true || parsedResult.isValid === "true") {
                 isValid = true;
-            } else if (result === false || result === "false" || result === "False") {
-                isValid = false;
+                aiCommentary = parsedResult.commentary || ""; 
+                console.log("✅ VERDICT FROM SMART CONTRACT: true");
+                if (aiCommentary) console.log("🤖 AI COMMENTARY GENERATED:", aiCommentary);
             } else {
-                isValid = matchesLocalRules;
+                isValid = false;
+                console.log("❌ VERDICT FROM SMART CONTRACT: false");
             }
+            console.log("=========================================\n");
             
         } catch (error) {
             console.error("❌ SDK Error, evaluating locally:", error.message);
@@ -196,17 +202,20 @@ io.on('connection', (socket) => {
         let targetPlayer = room.players[nextTurnIndex];
         let notification = "";
 
+        // --- HANDLE ACTION CARDS WITH ON-CHAIN AI TRASH TALK ---
         if (playedCard.isAction) {
+            let dynamicMessage = aiCommentary ? ` 🤖 [AI Ref]: "${aiCommentary}"` : ``;
+
             if (playedCard.number === 1) {
-                notification = `${casterName} played Hold On! ${targetPlayer.username} is skipped!`;
+                notification = `${casterName} played Hold On! ${targetPlayer.username} is skipped!${dynamicMessage}`;
                 nextTurnIndex = (room.currentTurnIndex + 2) % room.players.length; 
             } else if (playedCard.number === 2) {
-                notification = `${casterName} played Pick 2 against ${targetPlayer.username}!`;
+                notification = `${casterName} played Pick 2 against ${targetPlayer.username}!${dynamicMessage}`;
                 safeDraw(room, targetPlayer);
                 safeDraw(room, targetPlayer);
                 nextTurnIndex = (room.currentTurnIndex + 2) % room.players.length;
             } else if (playedCard.number === 14) {
-                notification = `${casterName} played General Market! Everyone draws!`;
+                notification = `${casterName} played General Market! Everyone draws!${dynamicMessage}`;
                 room.players.forEach(p => { if (p.id !== currentPlayer.id) safeDraw(room, p); });
                 nextTurnIndex = room.currentTurnIndex; 
             }
